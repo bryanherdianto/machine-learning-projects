@@ -1,33 +1,109 @@
 # Book Recommendation Engine using KNN
 
-In this challenge, you will create a book recommendation algorithm using K-Nearest Neighbors.
+## What this project does
 
-You will use the Book-Crossings dataset. This dataset contains 1.1 million ratings (scale of 1-10) of 270,000 books by 90,000 users.
+Have you ever seen "Customers who bought this also bought..." on Amazon? This project does exactly that — but for books.
 
-After importing and cleaning the data, use NearestNeighbors from sklearn.neighbors to develop a model that shows books that are similar to a given book. The Nearest Neighbors algorithm measures the distance to determine the “closeness” of instances.
+Given a book title, the system finds **5 similar books** based on the reading patterns of thousands of users. The idea is simple: if many users who rated _Book A_ highly also rated _Book B_ highly, those books are probably similar in genre or appeal.
 
-Create a function named get_recommends that takes a book title (from the dataset) as an argument and returns a list of 5 similar books with their distances from the book argument.
+## The dataset
 
-This code:
+The **Book-Crossings dataset** contains:
+
+| File                  | Contents                                   |
+| --------------------- | ------------------------------------------ |
+| `BX-Books.csv`        | Book metadata: ISBN, title, author         |
+| `BX-Book-Ratings.csv` | User ratings: user ID, ISBN, rating (1–10) |
+
+Overall: **1.1 million ratings** of **270,000 books** by **90,000 users**.
+
+### Filtering for quality
+
+Most books are rated by only a handful of users — not enough to draw reliable conclusions. So we filter:
+
+- **Remove users** with fewer than 200 ratings (they don't have enough reading history to be useful)
+- **Remove books** with fewer than 100 ratings (not enough consensus on them)
+
+This ensures that the recommendations are based on statistically meaningful data.
+
+## How it works (in simple terms)
+
+### Step 1 — Create a book-user matrix
+
+Imagine a giant spreadsheet where:
+
+- Each **row** is a book
+- Each **column** is a user
+- Each **cell** contains that user's rating for that book (or 0 if they didn't rate it)
+
+This is called a **pivot table**. Each row is a "rating fingerprint" for a book.
+
+### Step 2 — Measure similarity with cosine distance
+
+To find books similar to a given book, we compare its rating fingerprint to every other book's fingerprint. We use **cosine distance** — it measures the _angle_ between two vectors, ignoring their length.
+
+If two books have similar rating patterns (the same users liked them), their fingerprints point in a similar direction, so the cosine distance is small.
+
+### Step 3 — Find the 5 nearest neighbors
+
+The **K-Nearest Neighbors (KNN)** algorithm finds the 6 closest books (by cosine distance), skips the book itself, and returns the remaining 5 as recommendations — sorted from most distant to closest, as the challenge expects.
+
+## How to run it
+
+### Option 1 — Google Colab (easiest)
+
+1. Upload `notebook.ipynb` to [Google Colab](https://colab.research.google.com).
+2. Click **Runtime → Run all** (`Ctrl + F9`).
+3. The notebook downloads the data, builds the KNN model, and runs the test automatically.
+4. If everything works, you'll see:
+
+   > **You passed the challenge!**
+
+Training takes about 1–2 minutes (CPU is fine — KNN has no training phase, just a lookup).
+
+### Option 2 — Run on your own computer
+
+1. Install **Python 3.10+**.
+2. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+3. Open the notebook:
+   ```
+   jupyter notebook notebook.ipynb
+   ```
+4. Run each cell from top to bottom.
+
+## What each cell does
+
+| Cell                | What it does                                                  |
+| ------------------- | ------------------------------------------------------------- |
+| 1 (Imports)         | Load numpy, pandas, sklearn's NearestNeighbors                |
+| 2 (Download)        | Download & unzip the Book-Crossings dataset                   |
+| 3 (Load CSVs)       | Read `BX-Books.csv` and `BX-Book-Ratings.csv` into DataFrames |
+| 4–7 (Inspect)       | Show `.head()` and `.info()` for both DataFrames              |
+| 8 (Count users)     | Count how many ratings each user has                          |
+| 9 (Count books)     | Count how many ratings each book has                          |
+| 10 (Filter)         | Remove users with < 200 ratings and books with < 100 ratings  |
+| 11 (Merge)          | Join books and ratings on ISBN                                |
+| 12 (Pivot)          | Create the book × user matrix, fill missing with 0            |
+| 13 (KNN)            | Fit NearestNeighbors with cosine distance                     |
+| 14 (get_recommends) | Define the recommendation function                            |
+| 15 (Test)           | **Official freeCodeCamp grader**                              |
+
+## Dependencies
+
+| Library        | What it's for                       |
+| -------------- | ----------------------------------- |
+| `pandas`       | Loading CSVs, merging, pivot tables |
+| `numpy`        | Array operations for the KNN input  |
+| `scikit-learn` | The `NearestNeighbors` algorithm    |
+
+## Files in this project
+
 ```
-get_recommends("The Queen of the Damned (Vampire Chronicles (Paperback))")
+book-recommendation/
+├── README.md          ← you are here
+├── notebook.ipynb     ← the notebook (open this!)
+└── requirements.txt   ← Python dependencies
 ```
-should return:
-
-```
-[
-  'The Queen of the Damned (Vampire Chronicles (Paperback))',
-  [
-    ['Catch 22', 0.793983519077301], 
-    ['The Witching Hour (Lives of the Mayfair Witches)', 0.7448656558990479], 
-    ['Interview with the Vampire', 0.7345068454742432],
-    ['The Tale of the Body Thief (Vampire Chronicles (Paperback))', 0.5376338362693787],
-    ['The Vampire Lestat (Vampire Chronicles, Book II)', 0.5178412199020386]
-  ]
-]
-```
-Notice that the data returned from `get_recommends()` is a list. The first element in the list is the book title passed into the function. The second element in the list is a list of five more lists. Each of the five lists contains a recommended book and the distance from the recommended book to the book passed into the function.
-
-If you graph the dataset (optional), you will notice that most books are not rated frequently. To ensure statistical significance, remove from the dataset users with less than 200 ratings and books with less than 100 ratings.
-
-The first three cells import libraries you may need and the data to use. The final cell is for testing. Write all your code in between those cells.

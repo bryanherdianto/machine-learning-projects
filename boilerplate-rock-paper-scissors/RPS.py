@@ -1,87 +1,120 @@
-# The example function below keeps track of the opponent's history and plays whatever the opponent played two plays ago. It is not a very good player so you will need to change the code to pass the challenge.
+"""
+Rock Paper Scissors — ML Player (Markov Chain)
 
-import ast
-import json
+Uses a variable-order Markov chain to learn each opponent's patterns
+during play. Two models run in parallel:
 
-def player_kris(prev_play, opponent_history=[]):
-  ideal_response = {'P': 'S', 'R': 'P', 'S': 'R'}
+1. Opponent self-pattern (opp -> opp):
+   "after the opponent's last k moves, what do they play next?"
+   Captures bots with fixed cycles (e.g., quincy's RRPPS loop).
 
-  if prev_play == '':
-    prev_play = "R"
+2. Cross-response (me -> opp):
+   "after my last k moves, how does the opponent respond?"
+   Captures bots that react to my moves (kris, mrugesh, abbey).
 
-  guess = ideal_response[ideal_response[prev_play]]
+Each turn: update both models with the opponent's latest move,
+predict the opponent's next move, and play the counter.
 
-  return guess
+Model selection uses Laplace-smoothed confidence to pick the most
+reliable predictor, and exponential decay (0.95) lets the model
+track opponents that change strategy over time (e.g., abbey).
+"""
 
-def player_quincy(prev_play, opponent_history=[]):
-  opponent_history.append(prev_play)
+from collections import defaultdict
 
-  guess = "P"
 
-  if len(opponent_history) > 2:
-    guess = opponent_history[-3]
+class MarkovPlayer:
+    """Variable-order Markov chain that learns opponent patterns online."""
 
-  return guess
+    def __init__(self, max_order=3, decay=0.95):
+        self.max_order = max_order
+        self.decay = decay
+        self.my_history = []
+        self.opp_history = []
+        self.opp_model = defaultdict(lambda: defaultdict(float))
+        self.me_model = defaultdict(lambda: defaultdict(float))
 
-def player_mrugesh(prev_play):
-  player_history = []
-  ideal_response = {'P': 'S', 'R': 'P', 'S': 'R'}
+    def _update(self, prev_play):
+        """Update both models with the opponent's latest move."""
+        for k in range(1, min(self.max_order, len(self.opp_history) - 1) + 1):
+            ctx = "".join(self.opp_history[-(k + 1) : -1])
+            if ctx:
+                for move in self.opp_model[ctx]:
+                    self.opp_model[ctx][move] *= self.decay
+                self.opp_model[ctx][prev_play] += 1
 
-  if prev_play == '':
-    prev_play = 'S'
-    
-  player_history.append(ideal_response[ideal_response[prev_play]])
-  last_ten = player_history[-10:]
-  most_frequent = max(set(last_ten), key=last_ten.count)
+        for k in range(1, min(self.max_order, len(self.my_history) - 1) + 1):
+            ctx = "".join(self.my_history[-(k + 1) : -1])
+            if ctx:
+                for move in self.me_model[ctx]:
+                    self.me_model[ctx][move] *= self.decay
+                self.me_model[ctx][prev_play] += 1
 
-  return ideal_response[ideal_response[most_frequent]]
+    def _predict(self):
+        """Predict the opponent's next move using the most reliable model."""
+        best_pred = None
+        best_score = 0.0
 
-def player_abbey(prev_play, opponent_history=[]):
-  ideal_response = {'P': 'S', 'R': 'P', 'S': 'R'}
-  prediction = 'P'
-  play_order = {
-      "RR": 0,
-      "RP": 0,
-      "RS": 0,
-      "PR": 0,
-      "PP": 0,
-      "PS": 0,
-      "SR": 0,
-      "SP": 0,
-      "SS": 0,
-  }
-  
-  if not prev_play:
-    prev_play = 'R'
-    opponent_history.append(str(play_order))
-    opponent_history.append(prev_play)
-  else:
-    opponent_history.append(ideal_response[prev_play])
+        for k in range(1, min(self.max_order, len(self.my_history)) + 1):
+            ctx = "".join(self.my_history[-k:])
+            counts = self.me_model.get(ctx)
+            if counts:
+                total = sum(counts.values())
+                if total > 0:
+                    top_move = max(counts, key=counts.get)
+                    score = (counts[top_move] + 1) / (total + 3)
+                    if score > best_score:
+                        best_score = score
+                        best_pred = top_move
 
-  play_order = ast.literal_eval(opponent_history[0])
-  
-  if len(opponent_history) >= 3:
-    last_two = "".join(opponent_history[-2:])
-    if len(last_two) == 2:
-      play_order[last_two] += 1
-      opponent_history[0] = json.dumps(play_order)
+        for k in range(1, min(self.max_order, len(self.opp_history)) + 1):
+            ctx = "".join(self.opp_history[-k:])
+            counts = self.opp_model.get(ctx)
+            if counts:
+                total = sum(counts.values())
+                if total > 0:
+                    top_move = max(counts, key=counts.get)
+                    score = (counts[top_move] + 1) / (total + 3)
+                    if score > best_score:
+                        best_score = score
+                        best_pred = top_move
 
-  potential_plays = [
-    ideal_response[prev_play] + "R",
-    ideal_response[prev_play] + "P",
-    ideal_response[prev_play] + "S",
-  ]
-  
-  sub_order = {
-    k: play_order[k]
-    for k in potential_plays if k in play_order
-  }
+        if best_pred:
+            return best_pred
 
-  if len(opponent_history) <= 3:
-    return 'S'
+        if self.opp_history:
+            freq = {"R": 0, "P": 0, "S": 0}
+            for m in self.opp_history:
+                if m in freq:
+                    freq[m] += 1
+            return max(freq, key=freq.get)
 
-  for key, value in sub_order.items():
-    if value == min(sub_order.values()):
-      prediction = key[1]
-      
-  return prediction
+        return "R"
+
+    def play(self, prev_play):
+        ideal_response = {"R": "P", "P": "S", "S": "R"}
+
+        if prev_play != "":
+            self.opp_history.append(prev_play)
+            self._update(prev_play)
+
+        prediction = self._predict()
+        my_move = ideal_response[prediction]
+        self.my_history.append(my_move)
+        return my_move
+
+
+class Player:
+    """Wraps MarkovPlayer as a callable matching the game's player interface."""
+
+    def __init__(self):
+        self.model = MarkovPlayer(max_order=3, decay=0.95)
+
+    def __call__(self, prev_play):
+        return self.model.play(prev_play)
+
+
+player_quincy = Player()
+player_kris = Player()
+player_mrugesh = Player()
+player_abbey = Player()

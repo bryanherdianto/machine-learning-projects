@@ -1,60 +1,117 @@
 # Cat and Dog Image Classifier
 
-For this challenge, you will complete the code to classify images of dogs and cats. You will use TensorFlow 2.0 and Keras to create a convolutional neural network that correctly classifies images of cats and dogs at least 63% of the time. (Extra credit if you get it to 70% accuracy!)
+## What this project does
 
-Some of the code is given to you but some code you must fill in to complete this challenge. Read the instruction in each text cell so you will know what you have to do in each code cell.
+This project builds a **Convolutional Neural Network (CNN)** that looks at a photo and decides: is it a **cat** or a **dog**?
 
-The first code cell imports the required libraries. The second code cell downloads the data and sets key variables. The third cell is the first place you will write your own code.
+CNNs are specialized neural networks for images. Instead of looking at raw pixels one by one, they use **filters** that scan across the image and detect visual patterns — first simple edges, then textures, then complex shapes like ears or snouts.
 
-You can tweak epochs and batch size if you like, but it is not required.
+The model must correctly identify at least **63%** of 50 test images to pass the challenge.
 
-The following instructions correspond to specific cell numbers, indicated with a comment at the top of the cell (such as # 3).
+## The dataset
 
-### Cell 3
-Now it is your turn! Set each of the variables in this cell correctly. (They should no longer equal None.)
+The dataset contains RGB images of cats and dogs, organized in folders:
 
-Create image generators for each of the three image data sets (train, validation, test). Use ImageDataGenerator to read / decode the images and convert them into floating point tensors. Use the rescale argument (and no other arguments for now) to rescale the tensors from values between 0 and 255 to values between 0 and 1.
+| Split          | Images | Purpose                                        |
+| -------------- | ------ | ---------------------------------------------- |
+| **Training**   | 2,000  | The model learns from these                    |
+| **Validation** | 1,000  | Used to monitor training (prevent overfitting) |
+| **Test**       | 50     | Final check — the model has never seen these   |
 
-For the *_data_gen variables, use the flow_from_directory method. Pass in the batch size, directory, target size ((IMG_HEIGHT, IMG_WIDTH)), class mode, and anything else required. test_data_gen will be the trickiest one. For test_data_gen, make sure to pass in shuffle=False to the flow_from_directory method. This will make sure the final predictions stay is in the order that our test expects. For test_data_gen it will also be helpful to observe the directory structure.
+All images are resized to **150×150 pixels**.
 
-After you run the code, the output should look like this:
+## How it works (in simple terms)
 
-Found 2000 images belonging to 2 classes.
-Found 1000 images belonging to 2 classes.
-Found 50 images belonging to 1 class.
+### Step 1 — Load & rescale images
 
-### Cell 4
-The plotImages function will be used a few times to plot images. It takes an array of images and a probabilities list, although the probabilities list is optional. This code is given to you. If you created the train_data_gen variable correctly, then running this cell will plot five random training images.
+Images are loaded from disk in batches and **rescaled** from 0–255 (raw pixel values) to 0–1 (normalized). This helps the neural network learn faster.
 
-### Cell 5
-Recreate the train_image_generator using ImageDataGenerator.
+### Step 2 — Data augmentation
 
-Since there are a small number of training examples, there is a risk of overfitting. One way to fix this problem is by creating more training data from existing training examples by using random transformations.
+With only 2,000 training images, the model might **overfit** — memorize the training photos instead of learning what "cat-ness" and "dog-ness" look like in general.
 
-Add 4-6 random transformations as arguments to ImageDataGenerator. Make sure to rescale the same as before.
+**Data augmentation** fixes this by creating "new" training examples on the fly. Each image is randomly:
 
-### Cell 6
-You don't have to do anything for this cell. train_data_gen is created just like before but with the new train_image_generator. Then, a single image is plotted five different times using different variations.
+- **Rotated** up to 20°
+- **Flipped** horizontally
+- **Sheared** (slightly skewed)
+- **Zoomed** in randomly
 
-### Cell 7
-In this cell, create a model for the neural network that outputs class probabilities. It should use the Keras Sequential model. It will probably involve a stack of Conv2D and MaxPooling2D layers and then a fully connected layer on top that is activated by a ReLU activation function.
+This effectively multiplies the training data and forces the model to learn patterns that work regardless of orientation or position.
 
-Compile the model passing the arguments to set the optimizer and loss. Also pass in metrics=['accuracy'] to view training and validation accuracy for each training epoch.
+### Step 3 — Build the CNN
 
-### Cell 8
-Use the fit method on your model to train the network. Make sure to pass in arguments for x, steps_per_epoch, epochs, validation_data, and validation_steps.
+| Layer                        | What it does                                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Conv2D (32 filters, 3×3)** | Scans the image with 32 small 3×3 windows, each detecting a different pattern (edges, corners) |
+| **MaxPooling (2×2)**         | Shrinks the image by half, keeping only the strongest signals                                  |
+| **Conv2D (64 filters, 3×3)** | Detects 64 more complex patterns (textures, shapes)                                            |
+| **MaxPooling (2×2)**         | Shrinks again                                                                                  |
+| **Conv2D (64 filters, 3×3)** | Detects 64 even higher-level features                                                          |
+| **Flatten**                  | Converts the 2D grid of features into a 1D list                                                |
+| **Dense (64, ReLU)**         | A fully-connected layer that combines all features into a decision                             |
+| **Dense (1, sigmoid)**       | Outputs a single number: 0 = cat, 1 = dog                                                      |
 
-### Cell 9
-Run this cell to visualize the accuracy and loss of the model.
+### Step 4 — Train for 15 epochs
 
-### Cell 10
-Now it is time to use your model to predict whether a brand new image is a cat or a dog.
+The model sees the training images 15 times (15 **epochs**). After each epoch, it checks its accuracy on the validation set. The `adam` optimizer adjusts the filters automatically to reduce errors.
 
-In this cell, get the probability that each test image (from test_data_gen) is a dog or a cat. probabilities should be a list of integers.
+### Step 5 — Predict on test images
 
-Call the plotImages function and pass in the test images and the probabilities corresponding to each test image.
+After training, the model predicts a probability (0 to 1) for each of the 50 test images. Values above 0.5 → dog, below 0.5 → cat.
 
-After you run the cell, you should see all 50 test images with a label showing the percentage of "sure" that the image is a cat or a dog. The accuracy will correspond to the accuracy shown in the graph above (after running the previous cell). More training images could lead to a higher accuracy.
+## How to run it
 
-### Cell 11
-Run this final cell to see if you passed the challenge or if you need to keep trying.
+### Option 1 — Google Colab (recommended)
+
+1. Upload `notebook.ipynb` to [Google Colab](https://colab.research.google.com).
+2. Set runtime to **GPU**: **Runtime → Change runtime type → T4 GPU** (speeds up training significantly).
+3. Click **Runtime → Run all** (`Ctrl + F9`).
+4. The notebook downloads the data, trains the CNN, and runs the test automatically.
+5. Training takes about 5–15 minutes with GPU (longer on CPU).
+
+### Option 2 — Run on your own computer
+
+1. Install **Python 3.10+**.
+2. Install dependencies:
+   ```
+   pip install -r requirements.txt
+   ```
+3. Open the notebook:
+   ```
+   jupyter notebook notebook.ipynb
+   ```
+4. Run each cell from top to bottom. Training on CPU may take 10–30 minutes.
+
+## What each cell does
+
+| Cell                  | What it does                                                  |
+| --------------------- | ------------------------------------------------------------- |
+| 1 (Imports)           | Load TensorFlow, Keras, matplotlib; set random seeds          |
+| 2 (Download)          | Download & unzip the cat/dog dataset; count images            |
+| 3 (Generators)        | Create `ImageDataGenerator` for train/val/test with rescaling |
+| 4 (plotImages)        | Helper function to display images + sample training images    |
+| 5 (Augmentation)      | Create augmented image generator with random transformations  |
+| 6 (Augmented samples) | Show 5 augmented versions of one image                        |
+| 7 (Model)             | Build the CNN (3× Conv2D+MaxPool → Dense)                     |
+| 8 (Train)             | Train for 15 epochs with `steps_per_epoch` using `np.ceil`    |
+| 9 (Visualize)         | Plot training vs. validation accuracy and loss                |
+| 10 (Predict)          | Grab test images, predict probabilities, display results      |
+| 11 (Test)             | **Official freeCodeCamp grader**                              |
+
+## Dependencies
+
+| Library      | What it's for                                              |
+| ------------ | ---------------------------------------------------------- |
+| `tensorflow` | The CNN framework (Conv2D, MaxPooling, ImageDataGenerator) |
+| `numpy`      | Array operations (ceil, flatten, round)                    |
+| `matplotlib` | Plotting training curves and test image predictions        |
+
+## Files in this project
+
+```
+cat-dog-classifier/
+├── README.md          ← you are here
+├── notebook.ipynb     ← the notebook (open this!)
+└── requirements.txt   ← Python dependencies
+```
